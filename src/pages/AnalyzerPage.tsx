@@ -50,7 +50,7 @@ export default function AnalyzerPage({
   };
 
   return (
-    <div className="grid grid-cols-3 gap-6 p-4">
+    <div className="flex flex-col md:flex-row gap-6 p-4">
       {/* ฝั่งซ้าย: กล่องประมวลผลกล้องภาพอินสไปร์ */}
       <div className="bg-white p-6 rounded-3xl shadow-xs border border-gray-100/50 flex flex-col gap-4">
         <h2 className="text-xl font-bold text-gray-800">HUERA Extractor</h2>

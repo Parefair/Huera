@@ -77,6 +77,8 @@ export const generateLipstickDatabaseFromSwatches = async () => {
       ctx.drawImage(img, 0, 0);
 
       const colorResult = imageProcessor.analyzeLipWithOpenCV(canvas);
+      if (!colorResult)
+        throw new Error(`Could not detect lips in ${item.imageFile}`);
 
       generated.push({
         SKU: item.id,

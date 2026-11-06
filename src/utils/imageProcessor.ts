@@ -114,7 +114,7 @@ export const imageProcessor = {
   // },
   analyzeLipWithOpenCV: (
     canvas: HTMLCanvasElement,
-  ): { hex: string; lab: LabColor } => {
+  ): { hex: string; lab: LabColor } | null => {
     const cv = window.cv;
     const src = cv.imread(canvas);
     const rgb = new cv.Mat();
@@ -164,6 +164,7 @@ export const imageProcessor = {
     // 3. กรอง Highlight และ Shadow
     const validLipPixelsMask = cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC1);
     let center = new cv.Point(canvas.width / 2, canvas.height / 2);
+    let scanFailed = false;
 
     if (bestContourIdx !== -1 && maxArea > src.rows * src.cols * 0.01) {
       cv.drawContours(
@@ -194,6 +195,7 @@ export const imageProcessor = {
       notTooDark.delete();
     } else {
       alert("ไม่สามารถจับสีริมฝีปากได้");
+      scanFailed = true;
 
       // Fallback เดิม: วงกลมตรงกลาง
       // const radius = Math.min(canvas.width, canvas.height) * 0.08;
@@ -251,7 +253,7 @@ export const imageProcessor = {
     hierarchy.delete();
     validLipPixelsMask.delete();
 
-    return outputData;
+    return scanFailed ? null : outputData;
   },
 
   // แปลงค่าระบบสีจาก RGB เป็น Lab และ Hex ผ่าน ColorJS

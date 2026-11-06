@@ -4,19 +4,62 @@ interface ColorComparerProps {
   matches: ColorMatchResult[];
   selectedHex?: string;
   onSelectMatch?: (hex: string) => void;
+  compact?: boolean;
 }
 
 export default function ColorComparer({
   matches,
   selectedHex,
   onSelectMatch,
+  compact = false,
 }: ColorComparerProps) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className={`flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
       {matches.map((product) => {
         const isSelected =
           !!selectedHex &&
           product.hex.toLowerCase() === selectedHex.toLowerCase();
+
+        if (compact) {
+          return (
+            <button
+              key={String(product.SKU)}
+              type="button"
+              onClick={() => onSelectMatch?.(product.hex)}
+              className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all ${
+                isSelected
+                  ? "border-[#b04f4f] bg-rose-50/40"
+                  : "border-gray-100 bg-white hover:border-gray-200"
+              }`}
+            >
+              <span
+                className="h-3 w-3 shrink-0 rounded-full border border-white shadow-sm"
+                style={{ backgroundColor: product.hex }}
+              />
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold text-gray-700">
+                {product.brand} - {product.colorName}
+              </span>
+              <span className="shrink-0 text-[10px] text-gray-400">
+                {product.finish}
+              </span>
+              <span
+                className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold ${
+                  product.matchStatus === "excellent"
+                    ? "border border-emerald-100 bg-emerald-50 text-emerald-700"
+                    : product.matchStatus === "close"
+                      ? "border border-amber-100 bg-amber-50 text-amber-700"
+                      : "border border-rose-100 bg-rose-50 text-rose-700"
+                }`}
+              >
+                {product.matchStatus === "excellent"
+                  ? "ใกล้เคียงมาก"
+                  : product.matchStatus === "close"
+                    ? "ใกล้เคียง"
+                    : "ไม่แนะนำ"}
+              </span>
+            </button>
+          );
+        }
 
         return (
           <button

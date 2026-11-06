@@ -3,7 +3,7 @@ import { filterProcessor } from "../utils/filterProcessor";
 import { FilesetResolver, FaceLandmarker } from "@mediapipe/tasks-vision";
 import type { ColorMatchResult } from "../types/color";
 import type { LipFinish } from "../types/texture";
-import { LipControls } from "./LipsControl";
+import ColorComparer from "./ColorComparer";
 
 export interface Point2D {
   x: number;
@@ -13,20 +13,33 @@ export interface Point2D {
 interface FilterProps {
   scannedHex: string;
   suggestedMatches: ColorMatchResult[];
+  onUploadNew?: () => void;
 }
 
-export default function Filter({ scannedHex, suggestedMatches }: FilterProps) {
-  const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
-  const [isCameraReady, setIsCameraReady] = useState<boolean>(false);
+const FINISH_BLEND_MAP: Record<LipFinish, GlobalCompositeOperation> = {
+  matte: "multiply",
+  gloss: "screen",
+  oil: "soft-light",
+  blurred: "multiply",
+};
+
+export default function Filter({
+  scannedHex,
+  suggestedMatches,
+  onUploadNew,
+}: FilterProps) {
+  const [isCameraActive, setIsCameraActive] = useState<boolean>(true);
   const [opacity, setOpacity] = useState<number>(0.4);
   const [trialHex, setTrialHex] = useState<string>("#b04f4f");
-  const [currentFinish, setCurrentFinish] = useState<LipFinish>("matte");
+  const currentFinish: LipFinish = "matte";
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
   const requestRef = useRef<number | null>(null);
   const lastTimestampRef = useRef<number>(-1);
+  const cameraSessionRef = useRef(0);
+  const loadedDataHandlerRef = useRef<(() => void) | null>(null);
 
   // 🌟 1. สร้าง Refs เพื่อเก็บค่าสีและความเข้มชั่วคราว ไม่ให้ฟังก์ชัน predictFrame ต้องถูกสร้างใหม่
   const colorRef = useRef<string>("");
@@ -36,13 +49,6 @@ export default function Filter({ scannedHex, suggestedMatches }: FilterProps) {
     if (cleanHex.length !== 6) return { r: 176, g: 79, b: 79 };
     const num = parseInt(cleanHex, 16);
     return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
-  };
-
-  const finishBlendMap: Record<LipFinish, GlobalCompositeOperation> = {
-    matte: "multiply",
-    gloss: "screen",
-    oil: "soft-light",
-    blurred: "multiply",
   };
 
   // 🌟 2. อัปเดตค่าใน colorRef ทุกครั้งที่ trialHex หรือ opacity มีการเปลี่ยนแปลง
@@ -57,6 +63,18 @@ export default function Filter({ scannedHex, suggestedMatches }: FilterProps) {
       setTrialHex(scannedHex);
     }
   }, [scannedHex]);
+
+  const recommendedMatches = suggestedMatches.filter(
+    (match) => match.matchStatus !== "not-recommended",
+  );
+  const selectedMatch = recommendedMatches.find(
+    (match) => match.hex.toLowerCase() === trialHex.toLowerCase(),
+  );
+  const selectedColorName = selectedMatch
+    ? `${selectedMatch.brand} - ${selectedMatch.colorName}`
+    : trialHex.toLowerCase() === scannedHex.toLowerCase()
+      ? "สีจากภาพอัปโหลด"
+      : "เลือกสีที่ต้องการทดลอง";
 
   // 🌟 3. ปรับลด Dependency Array ให้เหลือแค่ว่างเปล่า [] เพื่อล็อกให้ฟังก์ชันนี้ทำงานยาวเป็นเส้นตรง
   const predictFrame = React.useCallback(
@@ -110,7 +128,7 @@ export default function Filter({ scannedHex, suggestedMatches }: FilterProps) {
             outerLipIndices.map((i) => landmarks[i]),
             ctx,
             currentLipColor,
-            finishBlendMap[currentFinish],
+            FINISH_BLEND_MAP[currentFinish],
             currentFinish,
           );
           filterProcessor.drawLipstick(
@@ -130,11 +148,20 @@ export default function Filter({ scannedHex, suggestedMatches }: FilterProps) {
   );
 
   const stopCamera = React.useCallback(() => {
+    cameraSessionRef.current += 1;
+
     if (requestRef.current) {
       cancelAnimationFrame(requestRef.current);
       requestRef.current = null;
     }
     if (videoRef.current?.srcObject) {
+      if (loadedDataHandlerRef.current) {
+        videoRef.current.removeEventListener(
+          "loadeddata",
+          loadedDataHandlerRef.current,
+        );
+        loadedDataHandlerRef.current = null;
+      }
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach((track) => track.stop());
       videoRef.current.srcObject = null;
@@ -148,30 +175,34 @@ export default function Filter({ scannedHex, suggestedMatches }: FilterProps) {
       }
     }
 
-    // lastTimestampRef.current = -1;
-    setIsCameraReady(false);
+    lastTimestampRef.current = -1;
   }, []);
 
   const startCamera = React.useCallback(() => {
     stopCamera();
+    const session = cameraSessionRef.current;
 
     navigator.mediaDevices
       .getUserMedia({ video: { width: 640, height: 480 } })
       .then((stream) => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.addEventListener("loadeddata", () => {
-            setIsCameraReady(true);
-            requestRef.current = requestAnimationFrame(predictFrame);
-          });
+        const video = videoRef.current;
+        if (!video || session !== cameraSessionRef.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
         }
+
+        video.srcObject = stream;
+        const handleLoadedData = () => {
+          if (session !== cameraSessionRef.current) return;
+          requestRef.current = requestAnimationFrame(predictFrame);
+        };
+        loadedDataHandlerRef.current = handleLoadedData;
+        video.addEventListener("loadeddata", handleLoadedData, { once: true });
       })
       .catch((err) => console.error("Access webcam failed:", err));
   }, [predictFrame, stopCamera]);
 
   useEffect(() => {
-    const currentVideo = videoRef.current;
-
     async function initAR() {
       try {
         if (!faceLandmarkerRef.current) {
@@ -204,44 +235,18 @@ export default function Filter({ scannedHex, suggestedMatches }: FilterProps) {
     initAR();
 
     return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-      if (currentVideo?.srcObject) {
-        const stream = currentVideo.srcObject as MediaStream;
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      stopCamera();
     };
   }, [startCamera, stopCamera, isCameraActive]);
 
   return (
     <div className="flex flex-col gap-4 bg-white p-5 rounded-3xl border border-gray-100/50 h-full">
-      <div className="flex justify-between items-center">
-        <h3 className="text-sm font-bold text-gray-700">AR Try-On Studio</h3>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsCameraActive((prev) => !prev)}
-            className={`text-[11px] font-bold px-3 py-1 rounded-full transition-all border ${
-              isCameraActive
-                ? "bg-rose-50 border-rose-100 text-[#b04f4f] hover:bg-rose-100/60"
-                : "bg-neutral-100 border-neutral-200 text-neutral-500 hover:bg-neutral-200/60"
-            }`}
-          >
-            {isCameraActive ? "⏸️ ปิดกล้อง" : "▶️ เปิดกล้อง"}
-          </button>
-
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${
-              isCameraReady && isCameraActive
-                ? "bg-emerald-50 text-emerald-600"
-                : "bg-neutral-50 text-neutral-400"
-            }`}
-          >
-            {isCameraReady && isCameraActive ? "● LIVE" : "⏳ OFF"}
-          </span>
-        </div>
-      </div>
+      <h2 className="text-2xl font-extrabold tracking-tight text-center text-[#473636] md:text-3xl">
+        Try-On with HuERA
+      </h2>
 
       {/* กล้องแนวตั้งแบบ Mirror */}
-      <div className="w-full aspect-3/4 max-w-sm mx-auto bg-neutral-950 rounded-2xl relative overflow-hidden shadow-inner border border-neutral-900 transform -scale-x-100">
+      <div className="relative h-[min(520px,70vh)] min-h-90 w-full overflow-hidden rounded-2xl border border-neutral-900 bg-neutral-950 shadow-inner transform -scale-x-100">
         <video
           ref={videoRef}
           autoPlay
@@ -254,6 +259,39 @@ export default function Filter({ scannedHex, suggestedMatches }: FilterProps) {
           className="absolute inset-0 w-full h-full object-cover pointer-events-none"
         />
 
+        <button
+          type="button"
+          aria-label={isCameraActive ? "Turn camera off" : "Turn camera on"}
+          title={isCameraActive ? "Turn camera off" : "Turn camera on"}
+          onClick={() => setIsCameraActive((prev) => !prev)}
+          className={`absolute left-3 top-3 z-10 flex h-10 w-10 -scale-x-100 items-center justify-center rounded-full shadow-lg transition ${
+            isCameraActive
+              ? "bg-white/90 text-[#b04f4f] hover:bg-white"
+              : "bg-[#b04f4f] text-white hover:bg-[#964141]"
+          }`}
+        >
+          {isCameraActive ? (
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="currentColor"
+            >
+              <rect x="6" y="5" width="4" height="14" rx="1" />
+              <rect x="14" y="5" width="4" height="14" rx="1" />
+            </svg>
+          ) : (
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="currentColor"
+            >
+              <path d="m8 5 11 7-11 7V5Z" />
+            </svg>
+          )}
+        </button>
+
         {!isCameraActive && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center transform -scale-x-100 p-6">
             <span className="text-2xl mb-2">📷</span>
@@ -263,6 +301,75 @@ export default function Filter({ scannedHex, suggestedMatches }: FilterProps) {
             </p>
           </div>
         )}
+      </div>
+
+      {/* สีที่เลือกและความเข้ม */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+        <div className="flex items-center gap-3">
+          <span
+            className="h-5 w-5 shrink-0 rounded-full border-2 border-white shadow-sm"
+            style={{ backgroundColor: trialHex }}
+          />
+          <div className="min-w-0">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+              สีที่เลือก
+            </div>
+            <div className="truncate text-sm font-bold text-[#b04f4f]">
+              {selectedColorName}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => scannedHex !== "#---" && setTrialHex(scannedHex)}
+            disabled={scannedHex === "#---"}
+            aria-label="สีจากภาพอัปโหลด"
+            className={`h-7 w-7 rounded-full border-2 transition-all ${
+              trialHex.toLowerCase() === scannedHex.toLowerCase()
+                ? "border-[#b04f4f] ring-2 ring-[#b04f4f]/20"
+                : "border-white shadow-sm"
+            } disabled:cursor-not-allowed disabled:opacity-40`}
+            style={{
+              backgroundColor: scannedHex !== "#---" ? scannedHex : "#eee",
+            }}
+          />
+          {recommendedMatches.map((match) => (
+            <button
+              key={match.SKU}
+              type="button"
+              onClick={() => setTrialHex(match.hex)}
+              aria-label={`${match.brand} - ${match.colorName}`}
+              className={`h-7 w-7 rounded-full border-2 transition-all ${
+                trialHex.toLowerCase() === match.hex.toLowerCase()
+                  ? "border-[#b04f4f] ring-2 ring-[#b04f4f]/20"
+                  : "border-white shadow-sm"
+              }`}
+              style={{ backgroundColor: match.hex }}
+            />
+          ))}
+          {onUploadNew && (
+            <button
+              type="button"
+              onClick={onUploadNew}
+              className="ml-auto flex min-h-10 items-center gap-2 rounded-xl border border-[#d9aaa5] bg-white px-4 py-2 text-xs font-bold text-[#b04f4f] shadow-sm transition hover:bg-rose-50"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h2l1.2-2h4.6l1.2 2h2A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-8Z" />
+                <circle cx="12" cy="12.5" r="3.5" />
+              </svg>
+              Upload New Inspiration!
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Slider ความเข้ม */}
@@ -284,59 +391,19 @@ export default function Filter({ scannedHex, suggestedMatches }: FilterProps) {
         />
       </div>
 
-      {/* เมนูเลือกสีสลับสับเปลี่ยน */}
-      <div className="flex flex-col gap-2 mt-1">
-        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-          เลือกสีทดลองบนใบหน้า
-        </span>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => scannedHex !== "#---" && setTrialHex(scannedHex)}
-            disabled={scannedHex === "#---"}
-            className={`flex items-center gap-2 p-2 rounded-xl text-left border transition-all text-xs ${
-              trialHex === scannedHex && scannedHex !== "#---"
-                ? "border-[#b04f4f] bg-rose-50/40 font-bold text-gray-800 shadow-xs"
-                : "border-gray-100 hover:border-gray-200 bg-white text-gray-500 disabled:opacity-40"
-            }`}
-          >
-            <div
-              className="w-4 h-4 rounded-md border shrink-0"
-              style={{
-                backgroundColor: scannedHex !== "#---" ? scannedHex : "#eee",
-              }}
-            />
-            <span className="truncate">สีภาพอัปโหลด</span>
-          </button>
-
-          {suggestedMatches.map((match, idx) => (
-            <button
-              key={match.SKU} // 💡 แก้ไข: ดึง SKU จากรากตรง ๆ
-              onClick={() => setTrialHex(match.hex)} // 💡 แก้ไข: ดึง hex จากรากตรง ๆ
-              className={`flex items-center gap-2 p-2 rounded-xl text-left border transition-all text-xs ${
-                trialHex === match.hex
-                  ? "border-[#b04f4f] bg-rose-50/40 font-bold text-gray-800 shadow-xs"
-                  : "border-gray-100 hover:border-gray-200 bg-white text-gray-500"
-              }`}
-            >
-              <div
-                className="w-4 h-4 rounded-md border shrink-0"
-                style={{ backgroundColor: match.hex }}
-              />
-              <span className="truncate">แนะนำ #{idx + 1}</span>
-            </button>
-          ))}
+      {recommendedMatches.length > 0 && (
+        <div className="flex flex-col gap-2 border-t border-gray-100 pt-4">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+            สินค้าแนะนำ
+          </span>
+          <ColorComparer
+            matches={recommendedMatches}
+            selectedHex={trialHex}
+            onSelectMatch={setTrialHex}
+            compact
+          />
         </div>
-      </div>
-
-      <div className="flex flex-col gap-2 mt-1">
-        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-          Finish
-        </span>
-        <LipControls
-          currentFinish={currentFinish}
-          onSelectFinish={setCurrentFinish}
-        />
-      </div>
+      )}
     </div>
   );
 }

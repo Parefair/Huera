@@ -13,17 +13,19 @@ export default function LipScanner({
   onScanStart,
   onScanSuccess,
 }: LipScannerProps) {
-  const [status, setStatus] = useState<string>(
-    "⏳ กำลังเตรียมระบบวิเคราะห์...",
-  );
+  const [, setStatus] = useState<string>("⏳ กำลังเตรียมระบบวิเคราะห์...");
   const [openCvStatus, setOpenCvStatus] = useState<
     "loading" | "ready" | "missing"
   >("loading");
-  const [mediaPipeStatus, setMediaPipeStatus] = useState<
-    "loading" | "ready" | "missing"
-  >("loading");
+  const [, setMediaPipeStatus] = useState<"loading" | "ready" | "missing">(
+    "loading",
+  );
   const [isReady, setIsReady] = useState<boolean>(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [pendingScan, setPendingScan] = useState<{
+    hex: string;
+    lab: LabColor;
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -120,6 +122,7 @@ export default function LipScanner({
 
     onScanStart();
     setImagePreview(null);
+    setPendingScan(null);
 
     setStatus("⏳ กำลังวิเคราะห์โครงสร้างภาพ...");
     const reader = new FileReader();
@@ -146,7 +149,7 @@ export default function LipScanner({
     canvas.height = img.height;
     ctx.drawImage(img, 0, 0);
 
-    let scanResult: { hex: string; lab: LabColor };
+    let scanResult: { hex: string; lab: LabColor } | null;
 
     // รันการตรวจสอบแบบไฮบริด (Hybrid Strategy) ตามโค้ดต้นฉบับเดิมของคุณ
     const landmarker = faceLandmarkerRef.current;
@@ -200,60 +203,23 @@ export default function LipScanner({
       });
     }
 
-    // ส่งค่าสีจริงที่สแกนได้ขึ้นสู่แอปพลิเคชันและอัปเดตตัวพรีวิวภาพพร้อมจุดเซนเซอร์
-    onScanSuccess(scanResult.hex, scanResult.lab);
+    if (!scanResult) {
+      setImagePreview(null);
+      setPendingScan(null);
+      setStatus("Upload a new image to try again");
+      return;
+    }
+
+    // Keep the result local until the user reviews and confirms it.
+    setPendingScan(scanResult);
     setImagePreview(canvas.toDataURL());
   };
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-2">
-        <div
-          className={`text-[11px] font-bold px-3 py-1.5 rounded-full ${
-            openCvStatus === "ready"
-              ? "bg-emerald-50 text-emerald-700"
-              : openCvStatus === "loading"
-                ? "bg-amber-50 text-amber-700"
-                : "bg-rose-50 text-[#b04f4f]"
-          }`}
-        >
-          OpenCV:{" "}
-          {openCvStatus === "ready"
-            ? "Ready"
-            : openCvStatus === "loading"
-              ? "Loading"
-              : "Missing"}
-        </div>
-        <div
-          className={`text-[11px] font-bold px-3 py-1.5 rounded-full ${
-            mediaPipeStatus === "ready"
-              ? "bg-emerald-50 text-emerald-700"
-              : mediaPipeStatus === "loading"
-                ? "bg-amber-50 text-amber-700"
-                : "bg-rose-50 text-[#b04f4f]"
-          }`}
-        >
-          MediaPipe:{" "}
-          {mediaPipeStatus === "ready"
-            ? "Ready"
-            : mediaPipeStatus === "loading"
-              ? "Loading"
-              : "Missing"}
-        </div>
-        <div
-          className={`text-xs font-bold px-3 py-1.5 rounded-full self-start ${
-            isReady
-              ? "bg-emerald-50 text-emerald-700"
-              : "bg-rose-50 text-[#b04f4f]"
-          }`}
-        >
-          {status}
-        </div>
-      </div>
-
       <div
         onClick={() => isReady && fileInputRef.current?.click()}
-        className={`w-full h-80 rounded-2xl flex items-center justify-center overflow-hidden border-2 border-dashed transition-all relative ${
+        className={`relative flex min-h-90 w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed transition-all md:h-[min(65vh,720px)] ${
           isReady
             ? "border-neutral-200 hover:border-[#b04f4f] bg-neutral-900 cursor-pointer"
             : "border-neutral-100 bg-neutral-50 cursor-not-allowed"
@@ -290,10 +256,41 @@ export default function LipScanner({
       <button
         onClick={() => fileInputRef.current?.click()}
         disabled={!isReady}
-        className="w-full py-3.5 bg-[#b04f4f] hover:bg-[#964141] disabled:bg-neutral-200 text-white font-bold rounded-xl text-sm transition-all shadow-xs active:scale-[0.99] cursor-pointer disabled:cursor-not-allowed"
+        className="w-full rounded-xl border border-[#d9aaa5] bg-white py-3 text-sm font-semibold text-[#b04f4f] transition-all hover:bg-rose-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:border-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-400"
       >
-        Upload Image (Full Face / Lip Zoom)
+        {imagePreview
+          ? "Change upload image"
+          : "Upload Image (Full Face / Lip Zoom)"}
       </button>
+
+      {pendingScan && (
+        <div className="rounded-2xl border border-[#e8caca] bg-[#fff8f8] p-4">
+          <div className="flex items-center gap-3">
+            <div
+              className="h-10 w-10 shrink-0 rounded-lg border border-white shadow-inner"
+              style={{ backgroundColor: pendingScan.hex }}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold text-gray-700">
+                Review captured result
+              </div>
+              <div className="font-mono text-sm font-bold text-[#b04f4f]">
+                {pendingScan.hex}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onScanSuccess(pendingScan.hex, pendingScan.lab);
+              setPendingScan(null);
+            }}
+            className="mt-5 w-full rounded-xl bg-[#b04f4f] py-3.5 text-sm font-bold text-white shadow-md transition hover:bg-[#964141] active:scale-[0.99]"
+          >
+            Let's Try On! →
+          </button>
+        </div>
+      )}
     </div>
   );
 }

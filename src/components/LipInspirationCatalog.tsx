@@ -67,7 +67,7 @@ export default function LipInspirationCatalog({
       </div>
 
       <div
-        className="relative touch-pan-y select-none overflow-hidden px-7 py-2"
+        className="relative touch-pan-y select-none overflow-hidden px-7 py-5"
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerCancel={() => {
@@ -108,12 +108,14 @@ export default function LipInspirationCatalog({
                   if (!didDrag.current) onSelectProduct(product);
                   didDrag.current = false;
                 }}
-                className={`group min-w-0 flex-[0_0_33.333%] px-1.5 text-left transition duration-700 ${
-                  isActive ? "relative z-10 scale-110" : "scale-80 opacity-55"
+                className={`group min-w-0 flex-[0_0_33.333%] rounded-xl border p-2 text-left shadow-sm transition duration-700 hover:border-[#d9aaa5] ${
+                  isActive
+                    ? "relative z-10 scale-110 border-[#eadbd9] bg-[#f9dfe0]"
+                    : "scale-80 border-[#eadbd9] bg-white opacity-55"
                 }`}
               >
                 <span className="block overflow-hidden rounded-xl transition duration-200 hover:-translate-y-0.5">
-                  <span className="relative block aspect-square">
+                  <span className="relative block aspect-[6/5]">
                     <img
                       src={imageUrl}
                       alt={`${product.brand} ${product.colorName}`}

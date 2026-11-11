@@ -29,6 +29,7 @@ export default function Filter({
   onUploadNew,
 }: FilterProps) {
   const [isCameraActive, setIsCameraActive] = useState<boolean>(true);
+  const [isCameraLoading, setIsCameraLoading] = useState<boolean>(true);
   const [opacity, setOpacity] = useState<number>(0.4);
   const [trialHex, setTrialHex] = useState<string>("#b04f4f");
   const currentFinish: LipFinish = "matte";
@@ -180,6 +181,7 @@ export default function Filter({
 
   const startCamera = React.useCallback(() => {
     stopCamera();
+    setIsCameraLoading(true);
     const session = cameraSessionRef.current;
 
     navigator.mediaDevices
@@ -193,13 +195,10 @@ export default function Filter({
 
         video.srcObject = stream;
         const startPrediction = () => {
-          if (
-            session !== cameraSessionRef.current ||
-            video.readyState < 2 ||
-            requestRef.current !== null
-          ) {
+          if (session !== cameraSessionRef.current || video.readyState < 2)
             return;
-          }
+          setIsCameraLoading(false);
+          if (requestRef.current !== null) return;
           loadedDataHandlerRef.current = null;
           requestRef.current = requestAnimationFrame(predictFrame);
         };
@@ -209,25 +208,33 @@ export default function Filter({
           .play()
           .then(startPrediction)
           .catch((err) => {
+            if (session === cameraSessionRef.current) setIsCameraLoading(false);
             console.error("Start webcam playback failed:", err);
           });
         startPrediction();
       })
-      .catch((err) => console.error("Access webcam failed:", err));
+      .catch((err) => {
+        if (session === cameraSessionRef.current) setIsCameraLoading(false);
+        console.error("Access webcam failed:", err);
+      });
   }, [predictFrame, stopCamera]);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function initAR() {
+      if (!isCameraActive) {
+        setIsCameraLoading(false);
+        stopCamera();
+        return;
+      }
+
+      setIsCameraLoading(true);
       try {
         faceLandmarkerRef.current = await getFaceLandmarker("VIDEO");
-
-        // 💡 เช็คก่อนเปิดหน้ากล้อง
-        if (isCameraActive) {
-          startCamera();
-        } else {
-          stopCamera();
-        }
+        if (!cancelled) startCamera();
       } catch (err) {
+        if (!cancelled) setIsCameraLoading(false);
         console.error("Camera filter initial failed:", err);
       }
     }
@@ -235,6 +242,7 @@ export default function Filter({
     initAR();
 
     return () => {
+      cancelled = true;
       stopCamera();
     };
   }, [startCamera, stopCamera, isCameraActive]);
@@ -258,6 +266,20 @@ export default function Filter({
           ref={canvasRef}
           className="absolute inset-0 w-full h-full object-cover pointer-events-none"
         />
+
+        {isCameraActive && isCameraLoading && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="pointer-events-none absolute inset-0 z-[5] flex -scale-x-100 flex-col items-center justify-center gap-4 bg-[#473636] text-sm font-semibold text-[#f9dfe0]"
+          >
+            <span
+              aria-hidden="true"
+              className="h-10 w-10 animate-spin rounded-full border-4 border-[#f9dfe0]/30 border-t-[#f9dfe0]"
+            />
+            <span>Loading camera...</span>
+          </div>
+        )}
 
         <button
           type="button"

@@ -206,7 +206,7 @@ export default function LipScanner({
     <div className="flex flex-col gap-4">
       <div
         onClick={() => !isProcessing && fileInputRef.current?.click()}
-        className={`relative flex min-h-90 w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-neutral-200 transition-all md:h-[min(65vh,720px)] ${isProcessing ? "cursor-wait bg-[#473636]" : "cursor-pointer bg-neutral-900 hover:border-[#b04f4f]"}`}
+        className={`relative flex min-h-90 w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-neutral-200 transition-all md:h-[min(65vh,720px)] ${isProcessing ? "cursor-wait bg-[#473636]" : imagePreview ? "cursor-pointer bg-neutral-900 hover:border-[#b04f4f]" : "cursor-pointer bg-[#f9dfe0] hover:border-[#b04f4f]"}`}
       >
         {isProcessing ? (
           <div
@@ -228,12 +228,24 @@ export default function LipScanner({
             className="w-full h-full object-contain"
           />
         ) : (
-          <div className="text-xs text-neutral-400 text-center p-6 font-medium leading-relaxed">
-            📸 Upload your inspiration!
-            <br />
-            <span className="text-[10px] text-neutral-500 font-normal mt-1 block">
-              Automatically detect lips and extract the color for analysis.
+          <div className="flex flex-col items-center gap-3 p-6 text-center text-sm font-medium leading-relaxed text-[#473636]">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full border border-[#473636]/25 bg-[#473636]/5">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-7 w-7"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.5"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="m21 15-5-5L5 21" />
+              </svg>
             </span>
+            <span>Upload your lip inspiration</span>
           </div>
         )}
       </div>

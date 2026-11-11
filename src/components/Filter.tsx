@@ -42,6 +42,7 @@ export default function Filter({
   const requestRef = useRef<number | null>(null);
   const lastTimestampRef = useRef<number>(-1);
   const cameraSessionRef = useRef(0);
+  const streamRef = useRef<MediaStream | null>(null);
   const loadedDataHandlerRef = useRef<(() => void) | null>(null);
 
   // 🌟 1. สร้าง Refs เพื่อเก็บค่าสีและความเข้มชั่วคราว ไม่ให้ฟังก์ชัน predictFrame ต้องถูกสร้างใหม่
@@ -157,17 +158,18 @@ export default function Filter({
       cancelAnimationFrame(requestRef.current);
       requestRef.current = null;
     }
-    if (videoRef.current?.srcObject) {
-      if (loadedDataHandlerRef.current) {
-        videoRef.current.removeEventListener(
-          "loadeddata",
-          loadedDataHandlerRef.current,
-        );
-        loadedDataHandlerRef.current = null;
-      }
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((track) => track.stop());
-      videoRef.current.srcObject = null;
+    const video = videoRef.current;
+    const stream =
+      streamRef.current ?? (video?.srcObject as MediaStream | null);
+    if (loadedDataHandlerRef.current) {
+      video?.removeEventListener("loadeddata", loadedDataHandlerRef.current);
+      loadedDataHandlerRef.current = null;
+    }
+    stream?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (video) {
+      video.pause();
+      if (video.srcObject === stream) video.srcObject = null;
     }
 
     const canvas = canvasRef.current;
@@ -193,6 +195,7 @@ export default function Filter({
           return;
         }
 
+        streamRef.current = stream;
         video.srcObject = stream;
         const startPrediction = () => {
           if (session !== cameraSessionRef.current || video.readyState < 2)

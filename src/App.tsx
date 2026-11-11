@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
-import AnalyzerPage from "./pages/AnalyzerPage";
+const AnalyzerPage = lazy(() => import("./pages/AnalyzerPage"));
 import GuidedAnalyzerPage from "./pages/GuidedAnalyzerPage";
-import LipsMaster from "./pages/LipsMaster";
+const LipsMaster = lazy(() => import("./pages/LipsMaster"));
 import type { ScannedColor } from "./types/color";
 import "./App.css";
 
@@ -70,27 +70,33 @@ export default function App() {
 
         {/* ส่วนโหลดเนื้อหาของแต่ละหน้าตาม URL */}
         <main className="content-container">
-          <Routes>
-            <Route
-              path="/"
-              element={
-                <GuidedAnalyzerPage
-                  savedColors={savedColors}
-                  setSavedColors={setSavedColors}
-                />
-              }
-            />
-            <Route
-              path="/analyzer"
-              element={
-                <AnalyzerPage
-                  savedColors={savedColors}
-                  setSavedColors={setSavedColors}
-                />
-              }
-            />
-            <Route path="/lipsmaster" element={<LipsMaster />} />
-          </Routes>
+          <Suspense
+            fallback={
+              <div className="p-6 text-sm text-gray-500">Loading...</div>
+            }
+          >
+            <Routes>
+              <Route
+                path="/"
+                element={
+                  <GuidedAnalyzerPage
+                    savedColors={savedColors}
+                    setSavedColors={setSavedColors}
+                  />
+                }
+              />
+              <Route
+                path="/analyzer"
+                element={
+                  <AnalyzerPage
+                    savedColors={savedColors}
+                    setSavedColors={setSavedColors}
+                  />
+                }
+              />
+              <Route path="/lipsmaster" element={<LipsMaster />} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
     </BrowserRouter>

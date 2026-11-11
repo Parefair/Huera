@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { lazy, Suspense, useState } from "react";
 import type { ColorMatchResult, LabColor, ScannedColor } from "../types/color";
 import ColorComparer from "../components/ColorComparer";
-import Filter from "../components/Filter";
 import LipScanner from "../components/LipScanner";
 import { colorMatcher } from "../utils/colorMatchers";
+
+const Filter = lazy(() => import("../components/Filter"));
 
 interface AnalyzerPageProps {
   savedColors: ScannedColor[];
@@ -135,7 +136,15 @@ export default function AnalyzerPage({
 
       <section className="min-w-0 rounded-3xl border border-gray-100/50 bg-white p-6 shadow-xs">
         <div className="mb-4 text-lg font-bold text-gray-800">Camera Area</div>
-        <Filter scannedHex={selectedLipColor} suggestedMatches={topMatches} />
+        <Suspense
+          fallback={
+            <div className="p-5 text-sm text-gray-500">
+              Loading camera tools...
+            </div>
+          }
+        >
+          <Filter scannedHex={selectedLipColor} suggestedMatches={topMatches} />
+        </Suspense>
       </section>
     </div>
   );

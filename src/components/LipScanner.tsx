@@ -1,8 +1,26 @@
 import React, { useRef, useState, useEffect } from "react";
 import type { LabColor } from "../types/color";
 import { imageProcessor } from "../utils/imageProcessor";
-import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
-import cvModule from "@techstark/opencv-js";
+import { getFaceLandmarker } from "../utils/faceLandmarker";
+
+let openCvLoadPromise: Promise<void> | null = null;
+
+const loadOpenCv = async () => {
+  openCvLoadPromise ??= (async () => {
+    const cvModule = (await import("@techstark/opencv-js")).default;
+    const cv = cvModule instanceof Promise ? await cvModule : cvModule;
+
+    if (!cv.Mat) {
+      await new Promise<void>((resolve) => {
+        cv.onRuntimeInitialized = resolve;
+      });
+    }
+
+    window.cv = cv;
+  })();
+
+  await openCvLoadPromise;
+};
 
 interface LipScannerProps {
   onScanStart: () => void;
@@ -13,14 +31,8 @@ export default function LipScanner({
   onScanStart,
   onScanSuccess,
 }: LipScannerProps) {
-  const [, setStatus] = useState<string>("⏳ กำลังเตรียมระบบวิเคราะห์...");
-  const [openCvStatus, setOpenCvStatus] = useState<
-    "loading" | "ready" | "missing"
-  >("loading");
-  const [, setMediaPipeStatus] = useState<"loading" | "ready" | "missing">(
-    "loading",
-  );
-  const [isReady, setIsReady] = useState<boolean>(false);
+  const [status, setStatus] = useState<string>("กำลังเตรียมระบบวิเคราะห์...");
+  const [isProcessing, setIsProcessing] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [pendingScan, setPendingScan] = useState<{
     hex: string;
@@ -30,86 +42,19 @@ export default function LipScanner({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const faceLandmarkerRef = useRef<FaceLandmarkerInstance | null>(null);
-
-  const loadOpenCv = async () => {
-    if (cvModule instanceof Promise) {
-      const cv = await cvModule;
-      window.cv = cv;
-      return true;
-    }
-
-    if (cvModule.Mat) {
-      window.cv = cvModule;
-      return true;
-    }
-
-    await new Promise<void>((resolve) => {
-      cvModule.onRuntimeInitialized = () => {
-        window.cv = cvModule;
-        resolve();
-      };
-    });
-
-    return true;
-  };
+  const isProcessingRef = useRef(false);
 
   useEffect(() => {
-    async function initAI() {
-      try {
-        // OpenCV ต้องมี runtime พร้อมก่อน ถึงจะใช้โหมดวิเคราะห์ริมฝีปากแบบละเอียดได้
-        setOpenCvStatus("loading");
-        const openCvReady = await loadOpenCv();
-        setOpenCvStatus(openCvReady ? "ready" : "missing");
-
-        // MediaPipe ถ้ามีสคริปต์พร้อมใช้ จะเปิดโหมด AI ให้
-        setMediaPipeStatus("loading");
-        let mediaPipeReady = false;
-
-        try {
-          const vision = await FilesetResolver.forVisionTasks(
-            "/mediapipe/tasks-vision/wasm",
-          );
-
-          faceLandmarkerRef.current = await FaceLandmarker.createFromOptions(
-            vision,
-            {
-              baseOptions: {
-                modelAssetPath:
-                  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-              },
-              runningMode: "IMAGE",
-              numFaces: 1,
-              minFaceDetectionConfidence: 0.4,
-            },
-          );
-
-          mediaPipeReady = true;
-          setMediaPipeStatus("ready");
-        } catch (error) {
-          console.error("Failed to load MediaPipe:", error);
-          setMediaPipeStatus("missing");
-        }
-
-        if (openCvReady && mediaPipeReady) {
-          setStatus("✅ OpenCV + MediaPipe พร้อมสแกน");
-        } else if (openCvReady) {
-          setStatus("✅ OpenCV พร้อมสแกน / ใช้ fallback AI");
-        } else if (mediaPipeReady) {
-          setStatus("✅ MediaPipe พร้อมสแกน / ใช้ fallback OpenCV");
-        } else {
-          setStatus("⚠️ ใช้ fallback mode (OpenCV / MediaPipe ยังไม่พร้อม)");
-        }
-
-        setIsReady(true);
-      } catch (error) {
-        console.error("Failed to load AI Engine:", error);
-        setOpenCvStatus(window.cv?.Mat ? "ready" : "missing");
-        setMediaPipeStatus("missing");
-        setStatus("⚠️ โหลดบาง library ไม่สำเร็จ แต่ยังใช้ fallback mode ได้");
-        setIsReady(true);
-      }
-    }
-    initAI();
+    getFaceLandmarker("IMAGE")
+      .then((landmarker) => {
+        faceLandmarkerRef.current = landmarker;
+        if (!isProcessingRef.current) setStatus("MediaPipe พร้อมสแกน");
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to load MediaPipe:", error);
+        if (!isProcessingRef.current)
+          setStatus("MediaPipe ไม่พร้อม จะใช้โหมดสำรองเมื่อวิเคราะห์");
+      });
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,21 +68,54 @@ export default function LipScanner({
     onScanStart();
     setImagePreview(null);
     setPendingScan(null);
+    isProcessingRef.current = true;
+    setIsProcessing(true);
+    setStatus("กำลังอ่านไฟล์รูปภาพ...");
 
-    setStatus("⏳ กำลังวิเคราะห์โครงสร้างภาพ...");
     const reader = new FileReader();
     reader.onload = (ev) => {
+      if (typeof ev.target?.result !== "string") {
+        setStatus("อ่านไฟล์รูปภาพไม่สำเร็จ กรุณาลองอีกครั้ง");
+        isProcessingRef.current = false;
+        setIsProcessing(false);
+        return;
+      }
+
       const img = new Image();
       img.onload = () => {
-        // อัปเดตและรันตัววิเคราะห์พิกเซลสีจริงจากภาพ (นำโค้ดฟิกซ์สีตัวเก่าออกแล้ว)
-        processImage(img);
+        setStatus(
+          faceLandmarkerRef.current
+            ? "กำลังตรวจจับใบหน้าและวิเคราะห์สีริมฝีปาก..."
+            : "กำลังโหลดโมเดลตรวจจับใบหน้า...",
+        );
+        void processImage(img)
+          .catch((error: unknown) => {
+            console.error("Image analysis failed:", error);
+            setPendingScan(null);
+            setImagePreview(null);
+            setStatus("วิเคราะห์รูปไม่สำเร็จ กรุณาลองอีกครั้ง");
+          })
+          .finally(() => {
+            isProcessingRef.current = false;
+            setIsProcessing(false);
+          });
       };
-      img.src = ev.target?.result as string;
+      img.onerror = () => {
+        setStatus("เปิดรูปภาพไม่สำเร็จ กรุณาเลือกไฟล์รูปอื่น");
+        isProcessingRef.current = false;
+        setIsProcessing(false);
+      };
+      img.src = ev.target.result;
+    };
+    reader.onerror = () => {
+      setStatus("อ่านไฟล์รูปภาพไม่สำเร็จ กรุณาลองอีกครั้ง");
+      isProcessingRef.current = false;
+      setIsProcessing(false);
     };
     reader.readAsDataURL(file);
   };
 
-  const processImage = (img: HTMLImageElement) => {
+  const processImage = async (img: HTMLImageElement) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -152,80 +130,98 @@ export default function LipScanner({
     let scanResult: { hex: string; lab: LabColor } | null;
 
     // รันการตรวจสอบแบบไฮบริด (Hybrid Strategy) ตามโค้ดต้นฉบับเดิมของคุณ
-    const landmarker = faceLandmarkerRef.current;
-    const result = landmarker?.detect(img);
+    let faceLandmarks: Array<{ x: number; y: number }> | undefined;
+    try {
+      const landmarker =
+        faceLandmarkerRef.current ?? (await getFaceLandmarker("IMAGE"));
+      faceLandmarkerRef.current = landmarker;
+      faceLandmarks = landmarker.detect(img).faceLandmarks?.[0];
+    } catch (error) {
+      console.error("MediaPipe image detection failed:", error);
+    }
 
-    if (result?.faceLandmarks && result.faceLandmarks.length > 0) {
-      setStatus("⚡ สแกนสำเร็จด้วย AI Smart Mode");
-      scanResult = imageProcessor.analyzeFace(
-        result.faceLandmarks[0],
-        canvas,
-        ctx,
-      );
-    } else if (openCvStatus === "ready" || window.cv?.Mat) {
-      setStatus("⚡ สแกนสำเร็จด้วย OpenCV Lip-Focus Mode");
-      scanResult = imageProcessor.analyzeLipWithOpenCV(canvas);
+    if (faceLandmarks) {
+      setStatus("ตรวจพบใบหน้า กำลังวิเคราะห์สีริมฝีปาก...");
+      scanResult = imageProcessor.analyzeFace(faceLandmarks, canvas, ctx);
     } else {
-      setStatus("⚠️ OpenCV ยังไม่พร้อม ใช้ fallback ตรงกลางภาพ");
-      const sampleSize = Math.max(
-        1,
-        Math.round(Math.min(canvas.width, canvas.height) * 0.05),
-      );
-      const centerX = Math.max(
-        0,
-        Math.floor(canvas.width / 2 - sampleSize / 2),
-      );
-      const centerY = Math.max(
-        0,
-        Math.floor(canvas.height / 2 - sampleSize / 2),
-      );
-      const imageData = ctx.getImageData(
-        centerX,
-        centerY,
-        sampleSize,
-        sampleSize,
-      ).data;
-      let r = 0;
-      let g = 0;
-      let b = 0;
+      try {
+        setStatus("ไม่พบใบหน้า กำลังเตรียม OpenCV...");
+        await loadOpenCv();
+        setStatus("กำลังวิเคราะห์บริเวณริมฝีปากด้วย OpenCV...");
+        scanResult = imageProcessor.analyzeLipWithOpenCV(canvas);
+      } catch (error) {
+        console.error("Failed to load OpenCV fallback:", error);
+        setStatus("OpenCV ไม่พร้อม กำลังใช้สีจากบริเวณกลางภาพ...");
+        const sampleSize = Math.max(
+          1,
+          Math.round(Math.min(canvas.width, canvas.height) * 0.05),
+        );
+        const centerX = Math.max(
+          0,
+          Math.floor(canvas.width / 2 - sampleSize / 2),
+        );
+        const centerY = Math.max(
+          0,
+          Math.floor(canvas.height / 2 - sampleSize / 2),
+        );
+        const imageData = ctx.getImageData(
+          centerX,
+          centerY,
+          sampleSize,
+          sampleSize,
+        ).data;
+        let r = 0;
+        let g = 0;
+        let b = 0;
 
-      for (let i = 0; i < imageData.length; i += 4) {
-        r += imageData[i];
-        g += imageData[i + 1];
-        b += imageData[i + 2];
+        for (let i = 0; i < imageData.length; i += 4) {
+          r += imageData[i];
+          g += imageData[i + 1];
+          b += imageData[i + 2];
+        }
+
+        const pixelCount = Math.max(1, imageData.length / 4);
+        scanResult = imageProcessor.convertRGBToLabAndHex({
+          r: r / pixelCount,
+          g: g / pixelCount,
+          b: b / pixelCount,
+        });
       }
-
-      const pixelCount = Math.max(1, imageData.length / 4);
-      scanResult = imageProcessor.convertRGBToLabAndHex({
-        r: r / pixelCount,
-        g: g / pixelCount,
-        b: b / pixelCount,
-      });
     }
 
     if (!scanResult) {
       setImagePreview(null);
       setPendingScan(null);
-      setStatus("Upload a new image to try again");
+      setStatus("สแกนสีไม่สำเร็จ กรุณาอัปโหลดรูปใหม่");
       return;
     }
 
     // Keep the result local until the user reviews and confirms it.
     setPendingScan(scanResult);
     setImagePreview(canvas.toDataURL());
+    setStatus("วิเคราะห์เสร็จแล้ว ตรวจสอบสีที่ได้ด้านล่าง");
   };
 
   return (
     <div className="flex flex-col gap-4">
       <div
-        onClick={() => isReady && fileInputRef.current?.click()}
-        className={`relative flex min-h-90 w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed transition-all md:h-[min(65vh,720px)] ${
-          isReady
-            ? "border-neutral-200 hover:border-[#b04f4f] bg-neutral-900 cursor-pointer"
-            : "border-neutral-100 bg-neutral-50 cursor-not-allowed"
-        }`}
+        onClick={() => !isProcessing && fileInputRef.current?.click()}
+        className={`relative flex min-h-90 w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-neutral-200 transition-all md:h-[min(65vh,720px)] ${isProcessing ? "cursor-wait bg-[#473636]" : "cursor-pointer bg-neutral-900 hover:border-[#b04f4f]"}`}
       >
-        {imagePreview ? (
+        {isProcessing ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex flex-col items-center gap-4 text-sm font-semibold text-[#f9dfe0]"
+          >
+            <span
+              aria-hidden="true"
+              className="h-10 w-10 animate-spin rounded-full border-4 border-[#f9dfe0]/30 border-t-[#f9dfe0]"
+            />
+            <span>On Processing...</span>
+            <span className="sr-only">{status}</span>
+          </div>
+        ) : imagePreview ? (
           <img
             src={imagePreview}
             alt="Preview"
@@ -248,19 +244,21 @@ export default function LipScanner({
         onChange={handleFileChange}
         accept="image/*"
         className="hidden"
-        disabled={!isReady}
+        disabled={isProcessing}
       />
 
       <canvas ref={canvasRef} className="hidden" />
 
       <button
-        onClick={() => fileInputRef.current?.click()}
-        disabled={!isReady}
+        onClick={() => !isProcessing && fileInputRef.current?.click()}
+        disabled={isProcessing}
         className="w-full rounded-xl border border-[#d9aaa5] bg-white py-3 text-sm font-semibold text-[#b04f4f] transition-all hover:bg-rose-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:border-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-400"
       >
-        {imagePreview
-          ? "Change upload image"
-          : "Upload Image (Full Face / Lip Zoom)"}
+        {isProcessing
+          ? "Processing..."
+          : imagePreview
+            ? "Change upload image"
+            : "Upload Image (Full Face / Lip Zoom)"}
       </button>
 
       {pendingScan && (

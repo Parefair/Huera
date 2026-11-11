@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { filterProcessor } from "../utils/filterProcessor";
-import { FilesetResolver, FaceLandmarker } from "@mediapipe/tasks-vision";
+import { getFaceLandmarker } from "../utils/faceLandmarker";
 import type { ColorMatchResult } from "../types/color";
 import type { LipFinish } from "../types/texture";
 import ColorComparer from "./ColorComparer";
@@ -35,7 +35,9 @@ export default function Filter({
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
+  const faceLandmarkerRef = useRef<Awaited<
+    ReturnType<typeof getFaceLandmarker>
+  > | null>(null);
   const requestRef = useRef<number | null>(null);
   const lastTimestampRef = useRef<number>(-1);
   const cameraSessionRef = useRef(0);
@@ -174,8 +176,6 @@ export default function Filter({
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
     }
-
-    lastTimestampRef.current = -1;
   }, []);
 
   const startCamera = React.useCallback(() => {
@@ -192,12 +192,26 @@ export default function Filter({
         }
 
         video.srcObject = stream;
-        const handleLoadedData = () => {
-          if (session !== cameraSessionRef.current) return;
+        const startPrediction = () => {
+          if (
+            session !== cameraSessionRef.current ||
+            video.readyState < 2 ||
+            requestRef.current !== null
+          ) {
+            return;
+          }
+          loadedDataHandlerRef.current = null;
           requestRef.current = requestAnimationFrame(predictFrame);
         };
-        loadedDataHandlerRef.current = handleLoadedData;
-        video.addEventListener("loadeddata", handleLoadedData, { once: true });
+        loadedDataHandlerRef.current = startPrediction;
+        video.addEventListener("loadeddata", startPrediction, { once: true });
+        void video
+          .play()
+          .then(startPrediction)
+          .catch((err) => {
+            console.error("Start webcam playback failed:", err);
+          });
+        startPrediction();
       })
       .catch((err) => console.error("Access webcam failed:", err));
   }, [predictFrame, stopCamera]);
@@ -205,21 +219,7 @@ export default function Filter({
   useEffect(() => {
     async function initAR() {
       try {
-        if (!faceLandmarkerRef.current) {
-          const vision = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm",
-          );
-          const instance = await FaceLandmarker.createFromOptions(vision, {
-            baseOptions: {
-              modelAssetPath:
-                "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-              delegate: "GPU",
-            },
-            runningMode: "VIDEO",
-            numFaces: 1,
-          });
-          faceLandmarkerRef.current = instance;
-        }
+        faceLandmarkerRef.current = await getFaceLandmarker("VIDEO");
 
         // 💡 เช็คก่อนเปิดหน้ากล้อง
         if (isCameraActive) {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import type { LipstickProduct } from "../types/color";
-import LIPSTICK_DATABASE from "../utils/lipsstickDb";
+import LIPSTICK_DATABASE, { createSwatchUrl } from "../utils/lipsstickDb";
 
 interface LipInspirationCatalogProps {
   onSelectProduct: (product: LipstickProduct) => void;
@@ -10,23 +10,24 @@ interface LipInspirationCatalogProps {
 export default function LipInspirationCatalog({
   onSelectProduct,
 }: LipInspirationCatalogProps) {
-  const [position, setPosition] = useState(1);
-  const [isTransitioning, setIsTransitioning] = useState(true);
+  const [activeIndex, setActiveIndex] = useState(0);
   const dragStartX = useRef<number | null>(null);
   const didDrag = useRef(false);
-  const products = [
-    LIPSTICK_DATABASE[LIPSTICK_DATABASE.length - 1],
-    ...LIPSTICK_DATABASE,
-    LIPSTICK_DATABASE[0],
-  ];
+  const products = LIPSTICK_DATABASE;
 
   const move = (direction: -1 | 1) => {
-    setIsTransitioning(true);
-    setPosition((currentPosition) => currentPosition + direction);
+    setActiveIndex(
+      (currentIndex) =>
+        (currentIndex + direction + products.length) % products.length,
+    );
   };
 
   useEffect(() => {
-    const timer = window.setInterval(() => move(1), 4000);
+    const timer = window.setInterval(() => {
+      setActiveIndex(
+        (currentIndex) => (currentIndex + 1) % LIPSTICK_DATABASE.length,
+      );
+    }, 4000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -46,15 +47,11 @@ export default function LipInspirationCatalog({
     dragStartX.current = null;
   };
 
-  const handleTransitionEnd = () => {
-    if (position === products.length - 1) {
-      setIsTransitioning(false);
-      setPosition(1);
-    } else if (position === 0) {
-      setIsTransitioning(false);
-      setPosition(products.length - 2);
-    }
-  };
+  const visibleProducts = [-1, 0, 1].map((offset) => ({
+    product:
+      products[(activeIndex + offset + products.length) % products.length],
+    offset,
+  }));
 
   return (
     <section className="mt-6 w-full">
@@ -97,16 +94,15 @@ export default function LipInspirationCatalog({
             ›
           </span>
         </button>
-        <div
-          className={`flex ${isTransitioning ? "transition-transform duration-500 ease-out" : ""}`}
-          style={{ transform: `translateX(-${(position - 1) * (100 / 3)}%)` }}
-          onTransitionEnd={handleTransitionEnd}
-        >
-          {products.map((product, index) => {
-            const isActive = index === position;
+        <div className="grid grid-cols-3 items-center">
+          {visibleProducts.map(({ product, offset }) => {
+            const isActive = offset === 0;
+            const imageUrl = (
+              product.imageUrl ?? createSwatchUrl(product.imageFile ?? "")
+            ).replace(/\.png$/i, ".webp");
             return (
               <button
-                key={`${product.SKU}-${index}`}
+                key={`${product.SKU}-${offset}`}
                 type="button"
                 onClick={() => {
                   if (!didDrag.current) onSelectProduct(product);
@@ -119,9 +115,11 @@ export default function LipInspirationCatalog({
                 <span className="block overflow-hidden rounded-xl transition duration-200 hover:-translate-y-0.5">
                   <span className="relative block aspect-square">
                     <img
-                      src={product.imageUrl}
+                      src={imageUrl}
                       alt={`${product.brand} ${product.colorName}`}
                       className="h-full w-full object-contain"
+                      loading={isActive ? "eager" : "lazy"}
+                      decoding="async"
                     />
                     <span className="pointer-events-none absolute bottom-2 right-2 rounded-full bg-[#473636]/90 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm transition group-hover:bg-[#b04f4f]">
                       Try →

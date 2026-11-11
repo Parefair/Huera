@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { lazy, Suspense, useState } from "react";
 import type {
   ScannedColor,
   ColorMatchResult,
@@ -6,9 +6,10 @@ import type {
   LipstickProduct,
 } from "../types/color";
 import LipScanner from "../components/LipScanner";
-import Filter from "../components/Filter";
 import LipInspirationCatalog from "../components/LipInspirationCatalog";
 import { colorMatcher } from "../utils/colorMatchers";
+
+const Filter = lazy(() => import("../components/Filter"));
 
 interface GuidedAnalyzerPageProps {
   savedColors: ScannedColor[];
@@ -149,11 +150,19 @@ export default function GuidedAnalyzerPage({
         </div>
       ) : (
         <>
-          <Filter
-            scannedHex={selectedLipColor}
-            suggestedMatches={topMatches}
-            onUploadNew={() => setStep(1)}
-          />
+          <Suspense
+            fallback={
+              <div className="p-5 text-sm text-gray-500">
+                Loading camera tools...
+              </div>
+            }
+          >
+            <Filter
+              scannedHex={selectedLipColor}
+              suggestedMatches={topMatches}
+              onUploadNew={() => setStep(1)}
+            />
+          </Suspense>
         </>
       )}
     </div>

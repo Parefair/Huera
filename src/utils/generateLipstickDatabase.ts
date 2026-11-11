@@ -1,6 +1,7 @@
 import rawData from "./lipsticks-meta.json";
 import { imageProcessor } from "./imageProcessor";
 import { SWATCH_FOLDER } from "./lipsstickDb";
+import { loadOpenCv } from "./openCv";
 
 interface LipstickMetaItem {
   id: number;
@@ -12,21 +13,6 @@ interface LipstickMetaItem {
   hex?: string;
   lab?: { l: number; a: number; b: number };
 }
-
-const loadOpenCv = async () => {
-  if (window.cv?.Mat) return;
-
-  const cvModule = (await import("@techstark/opencv-js")).default;
-  const cv = cvModule instanceof Promise ? await cvModule : cvModule;
-
-  if (!cv.Mat) {
-    await new Promise<void>((resolve) => {
-      cv.onRuntimeInitialized = resolve;
-    });
-  }
-
-  window.cv = cv;
-};
 
 const loadImage = (src: string) =>
   new Promise<HTMLImageElement>((resolve, reject) => {

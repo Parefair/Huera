@@ -2,25 +2,7 @@ import React, { useRef, useState, useEffect } from "react";
 import type { LabColor } from "../types/color";
 import { imageProcessor } from "../utils/imageProcessor";
 import { getFaceLandmarker } from "../utils/faceLandmarker";
-
-let openCvLoadPromise: Promise<void> | null = null;
-
-const loadOpenCv = async () => {
-  openCvLoadPromise ??= (async () => {
-    const cvModule = (await import("@techstark/opencv-js")).default;
-    const cv = cvModule instanceof Promise ? await cvModule : cvModule;
-
-    if (!cv.Mat) {
-      await new Promise<void>((resolve) => {
-        cv.onRuntimeInitialized = resolve;
-      });
-    }
-
-    window.cv = cv;
-  })();
-
-  await openCvLoadPromise;
-};
+import { loadOpenCv } from "../utils/openCv";
 
 interface LipScannerProps {
   onScanStart: () => void;

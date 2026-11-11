@@ -74,7 +74,7 @@ export default function GuidedAnalyzerPage({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4">
-      <div className="flex items-center justify-center gap-3 text-xs font-bold">
+      <div className="flex items-center justify-center gap-1.5 text-xs font-bold">
         <button
           type="button"
           onClick={() => setStep(1)}
@@ -84,7 +84,7 @@ export default function GuidedAnalyzerPage({
         >
           1. Upload
         </button>
-        <div className="h-px w-10 bg-gray-200" />
+        <div className="h-px w-5 bg-gray-200" />
         <div
           className={`rounded-full px-4 py-2 ${
             step === 2

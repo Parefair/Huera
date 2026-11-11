@@ -315,10 +315,24 @@ export default function Filter({
         </button>
 
         {!isCameraActive && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center transform -scale-x-100 p-6">
-            <span className="text-2xl mb-2">📷</span>
-            <p className="text-xs font-bold text-neutral-400">กล้องปิดอยู่</p>
-            <p className="text-[10px] text-neutral-500 mt-1">
+          <div className="absolute inset-0 flex -scale-x-100 flex-col items-center justify-center gap-3 bg-[#473636] p-6 text-center text-[#f9dfe0]">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full border border-[#f9dfe0]/35 bg-[#f9dfe0]/10">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-7 w-7"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.5"
+              >
+                <path d="M14 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4" />
+                <path d="m17 5 4 3v2M10 9.5a2.5 2.5 0 0 0 3.5 3.5M7 7l10 10" />
+              </svg>
+            </span>
+            <p className="text-sm font-bold">กล้องปิดอยู่</p>
+            <p className="text-[11px] text-[#f9dfe0]/75">
               กดปุ่ม "เปิดกล้อง" ด้านบนเพื่อเริ่มทดลองสีลิปสติก
             </p>
           </div>

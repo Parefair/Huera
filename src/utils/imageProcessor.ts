@@ -194,12 +194,15 @@ export const imageProcessor = {
       notTooBright.delete();
       notTooDark.delete();
     } else {
-      alert("ไม่สามารถจับสีริมฝีปากได้");
       scanFailed = true;
 
       // Fallback เดิม: วงกลมตรงกลาง
       // const radius = Math.min(canvas.width, canvas.height) * 0.08;
       // cv.circle(validLipPixelsMask, center, radius, new cv.Scalar(255), -1);
+    }
+
+    if (cv.countNonZero(validLipPixelsMask) === 0) {
+      scanFailed = true;
     }
 
     // 4. คำนวณค่าเฉลี่ยสี
@@ -212,28 +215,28 @@ export const imageProcessor = {
     // ==========================================
 
     if (bestContourIdx !== -1) {
-      // วาดเฉพาะเส้นขอบนอกของพื้นที่ปากที่ตรวจจับได้ (เส้นสีเขียวนีออน หนา 2px)
+      // วาดเส้นขอบพื้นที่ปากด้วยสี rose ของธีม
       cv.drawContours(
         src,
         contours,
         bestContourIdx,
-        new cv.Scalar(0, 255, 120, 255),
+        new cv.Scalar(176, 79, 79, 255),
         2,
       );
     } else {
-      // กรณี Fallback: วงกลมสีส้มเตือนว่าหาขอบปากไม่เจอ
+      // กรณี Fallback: วงกลมชมพูอ่อนแสดงตำแหน่งประมาณการ
       const fallbackRadius = Math.min(canvas.width, canvas.height) * 0.08;
       cv.circle(
         src,
         center,
         fallbackRadius,
-        new cv.Scalar(255, 140, 0, 255),
+        new cv.Scalar(249, 223, 224, 255),
         2,
       );
     }
 
-    // วาดเป้าเล็งวงกลมเล็ก ๆ ที่จุดกึ่งกลาง (เส้นวงกลมโปร่งใน ไม่ถมทึบ)
-    cv.circle(src, center, 6, new cv.Scalar(0, 255, 255, 255), 2);
+    // วาดวงเล็งเล็ก ๆ ด้วยสีชมพูอ่อน
+    cv.circle(src, center, 6, new cv.Scalar(249, 223, 224, 255), 2);
 
     // แสดงผลขึ้น Canvas
     cv.imshow(canvas, src);

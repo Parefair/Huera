@@ -34,6 +34,7 @@ export default function LipScanner({
   const [status, setStatus] = useState<string>("กำลังเตรียมระบบวิเคราะห์...");
   const [isProcessing, setIsProcessing] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [scanAlert, setScanAlert] = useState<string | null>(null);
   const [pendingScan, setPendingScan] = useState<{
     hex: string;
     lab: LabColor;
@@ -43,6 +44,13 @@ export default function LipScanner({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const faceLandmarkerRef = useRef<FaceLandmarkerInstance | null>(null);
   const isProcessingRef = useRef(false);
+
+  useEffect(() => {
+    if (!scanAlert) return;
+
+    const timeoutId = window.setTimeout(() => setScanAlert(null), 6000);
+    return () => window.clearTimeout(timeoutId);
+  }, [scanAlert]);
 
   useEffect(() => {
     getFaceLandmarker("IMAGE")
@@ -68,6 +76,7 @@ export default function LipScanner({
     onScanStart();
     setImagePreview(null);
     setPendingScan(null);
+    setScanAlert(null);
     isProcessingRef.current = true;
     setIsProcessing(true);
     setStatus("กำลังอ่านไฟล์รูปภาพ...");
@@ -76,6 +85,7 @@ export default function LipScanner({
     reader.onload = (ev) => {
       if (typeof ev.target?.result !== "string") {
         setStatus("อ่านไฟล์รูปภาพไม่สำเร็จ กรุณาลองอีกครั้ง");
+        setScanAlert("อ่านรูปภาพไม่สำเร็จ กรุณาลองเลือกไฟล์ใหม่");
         isProcessingRef.current = false;
         setIsProcessing(false);
         return;
@@ -94,6 +104,9 @@ export default function LipScanner({
             setPendingScan(null);
             setImagePreview(null);
             setStatus("วิเคราะห์รูปไม่สำเร็จ กรุณาลองอีกครั้ง");
+            setScanAlert(
+              "วิเคราะห์รูปภาพไม่สำเร็จ กรุณาเลือกรูปที่เห็นใบหน้าหรือริมฝีปากชัดเจน",
+            );
           })
           .finally(() => {
             isProcessingRef.current = false;
@@ -102,6 +115,7 @@ export default function LipScanner({
       };
       img.onerror = () => {
         setStatus("เปิดรูปภาพไม่สำเร็จ กรุณาเลือกไฟล์รูปอื่น");
+        setScanAlert("เปิดรูปภาพไม่สำเร็จ กรุณาลองเลือกไฟล์ใหม่");
         isProcessingRef.current = false;
         setIsProcessing(false);
       };
@@ -109,6 +123,7 @@ export default function LipScanner({
     };
     reader.onerror = () => {
       setStatus("อ่านไฟล์รูปภาพไม่สำเร็จ กรุณาลองอีกครั้ง");
+      setScanAlert("อ่านรูปภาพไม่สำเร็จ กรุณาลองเลือกไฟล์ใหม่");
       isProcessingRef.current = false;
       setIsProcessing(false);
     };
@@ -151,41 +166,8 @@ export default function LipScanner({
         scanResult = imageProcessor.analyzeLipWithOpenCV(canvas);
       } catch (error) {
         console.error("Failed to load OpenCV fallback:", error);
-        setStatus("OpenCV ไม่พร้อม กำลังใช้สีจากบริเวณกลางภาพ...");
-        const sampleSize = Math.max(
-          1,
-          Math.round(Math.min(canvas.width, canvas.height) * 0.05),
-        );
-        const centerX = Math.max(
-          0,
-          Math.floor(canvas.width / 2 - sampleSize / 2),
-        );
-        const centerY = Math.max(
-          0,
-          Math.floor(canvas.height / 2 - sampleSize / 2),
-        );
-        const imageData = ctx.getImageData(
-          centerX,
-          centerY,
-          sampleSize,
-          sampleSize,
-        ).data;
-        let r = 0;
-        let g = 0;
-        let b = 0;
-
-        for (let i = 0; i < imageData.length; i += 4) {
-          r += imageData[i];
-          g += imageData[i + 1];
-          b += imageData[i + 2];
-        }
-
-        const pixelCount = Math.max(1, imageData.length / 4);
-        scanResult = imageProcessor.convertRGBToLabAndHex({
-          r: r / pixelCount,
-          g: g / pixelCount,
-          b: b / pixelCount,
-        });
+        setStatus("OpenCV ไม่พร้อมและไม่สามารถตรวจจับริมฝีปากได้");
+        scanResult = null;
       }
     }
 
@@ -193,6 +175,7 @@ export default function LipScanner({
       setImagePreview(null);
       setPendingScan(null);
       setStatus("สแกนสีไม่สำเร็จ กรุณาอัปโหลดรูปใหม่");
+      setScanAlert("ไม่พบใบหน้าหรือริมฝีปากในภาพนี้ กรุณาลองอัปโหลดรูปใหม่");
       return;
     }
 
@@ -205,8 +188,27 @@ export default function LipScanner({
   return (
     <div className="flex flex-col gap-4">
       <div
-        onClick={() => !isProcessing && fileInputRef.current?.click()}
-        className={`relative flex min-h-90 w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-neutral-200 transition-all md:h-[min(65vh,720px)] ${isProcessing ? "cursor-wait bg-[#473636]" : imagePreview ? "cursor-pointer bg-neutral-900 hover:border-[#b04f4f]" : "cursor-pointer bg-[#f9dfe0] hover:border-[#b04f4f]"}`}
+        role={!imagePreview && !isProcessing ? "button" : undefined}
+        aria-label={
+          !imagePreview && !isProcessing
+            ? "Click to upload an image"
+            : undefined
+        }
+        tabIndex={!imagePreview && !isProcessing ? 0 : undefined}
+        onClick={() =>
+          !isProcessing && !imagePreview && fileInputRef.current?.click()
+        }
+        onKeyDown={(event) => {
+          if (
+            !imagePreview &&
+            !isProcessing &&
+            (event.key === "Enter" || event.key === " ")
+          ) {
+            event.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
+        className={`relative flex min-h-90 w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-neutral-200 transition-all md:h-[min(65vh,720px)] ${isProcessing ? "cursor-wait bg-[#473636]" : imagePreview ? "bg-neutral-900" : "cursor-pointer bg-[#f9dfe0] hover:border-[#b04f4f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b04f4f]"}`}
       >
         {isProcessing ? (
           <div
@@ -245,8 +247,20 @@ export default function LipScanner({
                 <path d="m21 15-5-5L5 21" />
               </svg>
             </span>
-            <span>Upload your lip inspiration</span>
+            <span className="font-semibold">Upload your lip inspiration</span>
+            <span className="text-xs font-medium text-[#b04f4f]">
+              Click to upload
+            </span>
           </div>
+        )}
+        {imagePreview && !isProcessing && (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute right-3 top-3 z-10 rounded-full border border-[#f9dfe0]/40 bg-[#473636]/90 px-3 py-2 text-xs font-semibold text-[#f9dfe0] shadow-sm transition hover:bg-[#5b4141]"
+          >
+            Re-upload
+          </button>
         )}
       </div>
 
@@ -261,17 +275,50 @@ export default function LipScanner({
 
       <canvas ref={canvasRef} className="hidden" />
 
-      <button
-        onClick={() => !isProcessing && fileInputRef.current?.click()}
-        disabled={isProcessing}
-        className="w-full rounded-xl border border-[#d9aaa5] bg-white py-3 text-sm font-semibold text-[#b04f4f] transition-all hover:bg-rose-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:border-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-400"
-      >
-        {isProcessing
-          ? "Processing..."
-          : imagePreview
-            ? "Change upload image"
-            : "Upload Image (Full Face / Lip Zoom)"}
-      </button>
+      {scanAlert && (
+        <div
+          role="alert"
+          className="fixed bottom-4 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 items-start gap-3 rounded-2xl border border-[#d9aaa5] bg-[#fff4f5] p-4 text-[#473636] shadow-xl"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f9dfe0] text-sm font-bold text-[#b04f4f]">
+            !
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">ตรวจจับไม่สำเร็จ</p>
+            <p className="mt-1 text-xs leading-relaxed text-[#6b5555]">
+              {scanAlert}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setScanAlert(null);
+                fileInputRef.current?.click();
+              }}
+              className="mt-3 rounded-lg bg-[#473636] px-3 py-2 text-xs font-semibold text-[#f9dfe0] transition hover:bg-[#5b4141]"
+            >
+              ลองอัปโหลดรูปใหม่
+            </button>
+          </div>
+          <button
+            type="button"
+            aria-label="ปิดข้อความแจ้งเตือน"
+            onClick={() => setScanAlert(null)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#6b5555] transition hover:bg-[#f9dfe0]"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeWidth="1.8"
+            >
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {pendingScan && (
         <div className="rounded-2xl border border-[#e8caca] bg-[#fff8f8] p-4">

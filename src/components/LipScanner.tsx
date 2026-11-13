@@ -230,6 +230,10 @@ export default function LipScanner({
               </svg>
             </span>
             <span className="font-semibold">Upload your lip inspiration</span>
+            <span className="max-w-md text-[11px] font-normal leading-relaxed text-[#6b5555]">
+              Your image is processed on this device and is not uploaded or
+              stored.
+            </span>
             <span className="text-xs font-medium text-[#b04f4f]">
               Click to upload
             </span>

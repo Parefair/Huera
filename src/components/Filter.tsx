@@ -256,13 +256,13 @@ export default function Filter({
   }, [startCamera, stopCamera, isCameraActive]);
 
   return (
-    <div className="flex flex-col gap-4 bg-white p-5 rounded-3xl border border-gray-100/50 h-full">
-      <h2 className="text-2xl font-extrabold tracking-tight text-center text-[#473636] md:text-3xl">
+    <div className="flex h-full flex-col gap-2.5 border border-gray-100/50 bg-white p-3 md:gap-4 md:rounded-3xl md:p-5">
+      {/* <h2 className="text-2xl font-extrabold tracking-tight text-center text-[#473636] md:text-3xl">
         Try-On with HuERA
-      </h2>
+      </h2> */}
 
       {/* กล้องแนวตั้งแบบ Mirror */}
-      <div className="relative h-[min(520px,70vh)] min-h-90 w-full overflow-hidden rounded-2xl border border-neutral-900 bg-neutral-950 shadow-inner transform -scale-x-100">
+      <div className="relative h-[min(400px,45vh)] min-h-56 w-full -scale-x-100 overflow-hidden rounded-2xl border border-neutral-900 bg-neutral-950 shadow-inner md:h-[min(520px,70vh)] md:min-h-90">
         <video
           ref={videoRef}
           autoPlay
@@ -348,7 +348,7 @@ export default function Filter({
       </div>
 
       {/* สีที่เลือกและความเข้ม */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+      <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-gray-50 p-3 md:gap-3 md:p-4">
         <div className="flex items-center gap-3">
           <span
             className="h-5 w-5 shrink-0 rounded-full border-2 border-white shadow-sm"
@@ -416,8 +416,8 @@ export default function Filter({
         </div>
       </div>
 
-      <div className="rounded-xl border border-neutral-100/50 bg-neutral-50 p-3">
-        <div className="mb-2 flex items-center justify-between">
+      <div className="rounded-xl border border-neutral-100/50 bg-neutral-50 p-2.5 md:p-3">
+        <div className="mb-1 flex items-center justify-between md:mb-2">
           <label
             htmlFor="lip-intensity"
             className="whitespace-nowrap text-xs font-bold text-neutral-500"

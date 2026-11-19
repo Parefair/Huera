@@ -17,7 +17,7 @@ export const LIP_FINISH_PRESETS: Record<SelectableLipFinish, LipFinishPreset> =
       min: 0.3,
       max: 0.9,
       def: 0.5,
-      marks: [0.3, 0.6, 0.9],
+      marks: [0.3, 0.5, 0.9],
       highlight: 0,
     },
     gloss: {

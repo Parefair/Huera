@@ -1,5 +1,6 @@
 import type { Point2D } from "../components/Filter";
-import type { LipFinish } from "../types/texture";
+import { LIP_FINISH_PRESETS } from "../types/texture";
+import type { LipFinish, LipFinishPreset } from "../types/texture";
 
 export const filterProcessor = {
   // แปลง RGB เป็น HEX สไตล์ตัวพิมพ์ใหญ่
@@ -73,6 +74,7 @@ export const filterProcessor = {
     color: string,
     blendMode: GlobalCompositeOperation,
     finish: LipFinish = "matte",
+    preset?: LipFinishPreset,
   ): void => {
     if (!landmarks || landmarks.length === 0) return;
 
@@ -96,38 +98,27 @@ export const filterProcessor = {
       ctx.shadowBlur = finish === "gloss" ? 20 : finish === "oil" ? 12 : 18;
       ctx.shadowColor = color;
 
-      if (finish === "matte") {
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = color;
-        ctx.fill();
-      } else if (finish === "gloss") {
-        ctx.globalAlpha = 0.75;
-        ctx.fillStyle = color;
-        ctx.fill();
-
-        ctx.globalCompositeOperation = "screen";
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = "rgba(255,255,255,0.85)";
-        ctx.fill();
-      } else if (finish === "oil") {
+      if (finish === "oil") {
         ctx.globalAlpha = 0.7;
         ctx.fillStyle = color;
         ctx.fill();
-
         ctx.globalCompositeOperation = "overlay";
         ctx.globalAlpha = 0.25;
         ctx.fillStyle = "rgba(255,255,255,0.9)";
         ctx.fill();
       } else {
-        ctx.filter = "blur(5px)";
-        ctx.globalAlpha = 0.6;
+        const selectedPreset = preset ?? LIP_FINISH_PRESETS[finish];
+        if (finish === "blurred") ctx.filter = "blur(5px)";
+        ctx.globalAlpha = selectedPreset.coverage;
         ctx.fillStyle = color;
         ctx.fill();
 
-        ctx.globalCompositeOperation = "screen";
-        ctx.globalAlpha = 0.18;
-        ctx.fillStyle = "rgba(255,255,255,0.8)";
-        ctx.fill();
+        if (selectedPreset.highlight > 0) {
+          ctx.globalCompositeOperation = "screen";
+          ctx.globalAlpha = selectedPreset.highlight;
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          ctx.fill();
+        }
       }
     } else {
       ctx.globalCompositeOperation = "destination-out";

@@ -1,4 +1,42 @@
 export type LipFinish = "matte" | "gloss" | "oil" | "blurred";
+export type SelectableLipFinish = Exclude<LipFinish, "oil">;
+
+export interface LipFinishPreset {
+  coverage: number;
+  min: number;
+  max: number;
+  def: number;
+  marks: number[];
+  highlight: number;
+}
+
+export const LIP_FINISH_PRESETS: Record<SelectableLipFinish, LipFinishPreset> =
+  {
+    matte: {
+      coverage: 0.9,
+      min: 0.3,
+      max: 0.9,
+      def: 0.5,
+      marks: [0.3, 0.6, 0.9],
+      highlight: 0,
+    },
+    gloss: {
+      coverage: 0.75,
+      min: 0.3,
+      max: 0.8,
+      def: 0.5,
+      marks: [0.3, 0.5, 0.8],
+      highlight: 0.3,
+    },
+    blurred: {
+      coverage: 0.6,
+      min: 0.3,
+      max: 0.8,
+      def: 0.5,
+      marks: [0.3, 0.5, 0.8],
+      highlight: 0.12,
+    },
+  };
 
 export interface RenderLipOptions {
   ctx: CanvasRenderingContext2D;

@@ -20,3 +20,40 @@ select:disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;
 }
+
+.lip-intensity-range {
+  appearance: none;
+  height: 16px;
+  background: transparent;
+}
+
+.lip-intensity-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: #e5e5e5;
+}
+
+.lip-intensity-range::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: #e5e5e5;
+}
+
+.lip-intensity-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #b04f4f;
+}
+
+.lip-intensity-range::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #b04f4f;
+}

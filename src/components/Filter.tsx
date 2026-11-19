@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { filterProcessor } from "../utils/filterProcessor";
 import { getFaceLandmarker } from "../utils/faceLandmarker";
 import type { ColorMatchResult } from "../types/color";
-import type { LipFinish } from "../types/texture";
+import { LIP_FINISH_PRESETS } from "../types/texture";
+import type { LipFinish, LipFinishPreset } from "../types/texture";
 import ColorComparer from "./ColorComparer";
 
 export interface Point2D {
@@ -30,9 +31,9 @@ export default function Filter({
 }: FilterProps) {
   const [isCameraActive, setIsCameraActive] = useState<boolean>(true);
   const [isCameraLoading, setIsCameraLoading] = useState<boolean>(true);
-  const [opacity, setOpacity] = useState<number>(0.4);
+  const [opacity, setOpacity] = useState<number>(LIP_FINISH_PRESETS.matte.def);
   const [trialHex, setTrialHex] = useState<string>("#b04f4f");
-  const currentFinish: LipFinish = "matte";
+  const currentPreset = LIP_FINISH_PRESETS.matte;
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -44,6 +45,8 @@ export default function Filter({
   const cameraSessionRef = useRef(0);
   const streamRef = useRef<MediaStream | null>(null);
   const loadedDataHandlerRef = useRef<(() => void) | null>(null);
+  const currentFinishRef = useRef<LipFinish>("matte");
+  const currentPresetRef = useRef<LipFinishPreset>(LIP_FINISH_PRESETS.matte);
 
   // 🌟 1. สร้าง Refs เพื่อเก็บค่าสีและความเข้มชั่วคราว ไม่ให้ฟังก์ชัน predictFrame ต้องถูกสร้างใหม่
   const colorRef = useRef<string>("");
@@ -127,13 +130,15 @@ export default function Filter({
 
           // 💡 ดึงค่าสีจาก colorRef.current มาวาดลงเฟรมภาพสดได้ทันที
           const currentLipColor = colorRef.current;
+          const frameFinish = currentFinishRef.current;
 
           filterProcessor.drawLipstick(
             outerLipIndices.map((i) => landmarks[i]),
             ctx,
             currentLipColor,
-            FINISH_BLEND_MAP[currentFinish],
-            currentFinish,
+            FINISH_BLEND_MAP[frameFinish],
+            frameFinish,
+            currentPresetRef.current,
           );
           filterProcessor.drawLipstick(
             innerLipIndices.map((i) => landmarks[i]),
@@ -411,23 +416,68 @@ export default function Filter({
         </div>
       </div>
 
-      {/* Slider ความเข้ม */}
-      <div className="flex items-center gap-4 bg-neutral-50 p-2.5 rounded-xl border border-neutral-100/50">
-        <label className="text-xs font-bold text-neutral-500 whitespace-nowrap">
-          Intensity:{" "}
-          <span className="text-[#b04f4f] font-mono">
+      <div className="rounded-xl border border-neutral-100/50 bg-neutral-50 p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <label
+            htmlFor="lip-intensity"
+            className="whitespace-nowrap text-xs font-bold text-neutral-500"
+          >
+            Intensity
+          </label>
+          <span className="font-mono text-xs font-bold text-[#b04f4f]">
             {Math.round(opacity * 100)}%
           </span>
-        </label>
+        </div>
         <input
+          id="lip-intensity"
           type="range"
-          min="0.1"
-          max="0.9"
+          min={currentPreset.min}
+          max={currentPreset.max}
           step="0.05"
           value={opacity}
-          onChange={(e) => setOpacity(parseFloat(e.target.value))}
-          className="w-full h-1.5 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-[#b04f4f]"
+          list="opacity-marks-matte"
+          onChange={(event) => setOpacity(parseFloat(event.target.value))}
+          className="lip-intensity-range w-full cursor-pointer accent-[#b04f4f]"
         />
+        <datalist id="opacity-marks-matte">
+          {currentPreset.marks.map((mark) => (
+            <option key={mark} value={mark} />
+          ))}
+        </datalist>
+        <div className="relative mx-2 mt-2 h-7" aria-hidden="true">
+          {currentPreset.marks.map((mark, index) => {
+            const left =
+              ((mark - currentPreset.min) /
+                (currentPreset.max - currentPreset.min)) *
+              100;
+            const isFirst = index === 0;
+            const isLast = index === currentPreset.marks.length - 1;
+            const label = isFirst ? "Light" : isLast ? "Full" : "Medium";
+
+            return (
+              <span
+                key={mark}
+                className="absolute top-0 -translate-x-1/2"
+                style={{ left: `${left}%` }}
+              >
+                <span className="mx-auto block h-1.5 w-1.5 rounded-full bg-[#b04f4f]" />
+                {label && (
+                  <span
+                    className={`absolute top-2 whitespace-nowrap text-[10px] text-neutral-500 ${
+                      isFirst
+                        ? "left-0"
+                        : isLast
+                          ? "right-0"
+                          : "left-1/2 -translate-x-1/2"
+                    }`}
+                  >
+                    {label}
+                  </span>
+                )}
+              </span>
+            );
+          })}
+        </div>
       </div>
 
       {recommendedMatches.length > 0 && (
